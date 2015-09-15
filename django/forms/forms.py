@@ -78,11 +78,12 @@ class BaseForm(object):
     field_order = None
     prefix = None
 
-    def __init__(self, data=None, files=None, auto_id='id_%s', prefix=None,
-                 initial=None, error_class=ErrorList, label_suffix=None,
+    def __init__(self, data=None, data_values=None, files=None, auto_id='id_%s',
+                 prefix=None, initial=None, error_class=ErrorList, label_suffix=None,
                  empty_permitted=False, field_order=None):
-        self.is_bound = data is not None or files is not None
+        self.is_bound = data is not None or data_values is not None or files is not None
         self.data = data or {}
+        self.data_values = data_values or {}
         self.files = files or {}
         self.auto_id = auto_id
         if prefix is not None:
@@ -154,6 +155,16 @@ class BaseForm(object):
         if name not in self._bound_fields_cache:
             self._bound_fields_cache[name] = BoundField(self, field, name)
         return self._bound_fields_cache[name]
+
+    def get_data_value(self, field_name):
+        "Returns the value of a field given by data or data_values"
+        field = self.fields[field_name]
+        prefix = self.add_prefix(field_name)
+        widget_value = field.widget.value_from_datadict(self.data, self.files, prefix)
+        if widget_value is None:
+            widget_value = self.data_values.get(field_name)
+
+        return widget_value
 
     @property
     def errors(self):
@@ -380,7 +391,7 @@ class BaseForm(object):
             if field.disabled:
                 value = self.initial.get(name, field.initial)
             else:
-                value = field.widget.value_from_datadict(self.data, self.files, self.add_prefix(name))
+                value = self.get_data_value(name)
             try:
                 if isinstance(field, FileField):
                     initial = self.initial.get(name, field.initial)
@@ -429,8 +440,7 @@ class BaseForm(object):
     def changed_data(self):
         data = []
         for name, field in self.fields.items():
-            prefixed_name = self.add_prefix(name)
-            data_value = field.widget.value_from_datadict(self.data, self.files, prefixed_name)
+            data_value = self.get_data_value(name)
             if not field.show_hidden_initial:
                 initial_value = self.initial.get(name, field.initial)
                 if callable(initial_value):
@@ -596,7 +606,7 @@ class BoundField(object):
         """
         Returns the data for this BoundField, or None if it wasn't given.
         """
-        return self.field.widget.value_from_datadict(self.form.data, self.form.files, self.html_name)
+        return self.form.get_data_value(self.name)
 
     def value(self):
         """
